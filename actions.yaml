@@ -18,11 +18,25 @@ cleanup:
           action.
     required:
       - i-really-mean-it
+disable:
+  description: |
+    Disable all agents from this unit. This prevents neutron from running
+    new activities.
+enable:
+  description: |
+    Enable all agents from this unit. This allows neutron to run new activities.
 pause:
     description: |
         Pause the neutron-openvswitch unit.  This action will stop neutron-openvswitch services.
         .
         NOTE: Pausing neutron-openvswitch does not stop the openvswitch-switch service.
+register-to-cloud:
+  description: |
+    Register neutron agents. This is normally followed by the enable action. Reverts action
+    remove-from-cloud.
+remove-from-cloud:
+  description: |
+    Unregister agents from this unit in neutron.
 resume:
     descrpition: |
         Resume the neutron-openvswitch unit.  This action will start neutron-openvswitch services.

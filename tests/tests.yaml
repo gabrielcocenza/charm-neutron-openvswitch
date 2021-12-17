@@ -61,6 +61,7 @@ target_deploy_status:
 tests:
   - zaza.openstack.charm_tests.neutron.tests.NeutronOVSDeferredRestartTest
   - zaza.openstack.charm_tests.neutron.tests.NeutronNetworkingTest
+  - zaza.openstack.charm_tests.neutron.tests.NeutronOpenvSwitchAgentsTest
   - zaza.openstack.charm_tests.neutron.tests.NeutronOpenvSwitchTest
   - zaza.openstack.charm_tests.neutron.tests.NeutronOvsVsctlTest
   - zaza.openstack.charm_tests.neutron.tests.NeutronBridgePortMappingTest
@@ -69,6 +70,7 @@ tests:
     - zaza.openstack.charm_tests.neutron.tests.NeutronNetworkingTest
     - zaza.openstack.charm_tests.neutron.tests.NeutronOvsVsctlTest
     - zaza.openstack.charm_tests.neutron.tests.NeutronBridgePortMappingTest
+    - zaza.openstack.charm_tests.neutron.tests.NeutronOpenvSwitchAgentsTest
     - zaza.openstack.charm_tests.ovn.tests.OVSOVNMigrationTest
     - zaza.openstack.charm_tests.neutron.tests.NeutronNetworkingTest
 tests_options:

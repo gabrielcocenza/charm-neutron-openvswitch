@@ -21,17 +21,109 @@ sys.path.append('hooks/')
 
 import charmhelpers.contrib.openstack.deferred_events as deferred_events
 import charmhelpers.contrib.openstack.utils as os_utils
+import charmhelpers.contrib.openstack.neutron as neutron
+
+from charmhelpers.contrib.openstack import context as os_context
 from charmhelpers.core.hookenv import (
     action_get,
     action_fail,
+    config,
+    DEBUG,
+    WARNING,
+    function_set,
+    function_fail,
+    log,
+    status_get,
+    status_set,
+    WORKLOAD_STATES,
 )
+from charmhelpers.core.host import (
+    service_pause,
+    service_resume,
+)
+
 import neutron_ovs_hooks
 from neutron_ovs_utils import (
     assess_status,
     pause_unit_helper,
     resume_unit_helper,
     register_configs,
+    use_fqdn_hint,
 )
+
+UNIT_REMOVED_MSG = 'Neutron agents were removed from the cloud'
+
+
+def _get_agents_binaries():
+    """Get valid agents binary services denpending on the charm config
+    for enable-local-dhcp-and-metadata.
+
+    :return: List of agents binary
+    :rtype: [str]
+    """
+    agents_binaries = ["neutron-openvswitch-agent", "neutron-l3-agent"]
+    if config("enable-local-dhcp-and-metadata"):
+        agents_binaries.extend(
+            ["neutron-metadata-agent", "neutron-dhcp-agent"]
+        )
+
+    return agents_binaries
+
+
+def _get_agents(neutron_client):
+    """Get agents from the unit filtering by expected agents binaries.
+    Agents may depend on the enable-local-dhcp-and-metadata and if the
+    unit was submited to OVN migration.
+
+    :param neutron_client: neutron client
+    :type neutron_client: neutronclient.v2_0.client.Client
+    :return: List of agents able to be enable/disabe or removed by the unit
+    :rtype: [Dict]
+    """
+    host_info = os_context.HostInfoContext(use_fqdn_hint_cb=use_fqdn_hint)()
+    if host_info.get('use_fqdn_hint'):
+        host_name = host_info.get('host_fqdn')
+    else:
+        host_name = host_info.get('host')
+
+    agents = neutron.get_network_agents_on_host(host_name, neutron_client)
+    if not agents:
+        log("No agents registered", WARNING)
+    agents_binaries = _get_agents_binaries()
+    return [agent for agent in agents if agent['binary'] in agents_binaries]
+
+
+def _set_agents(state):
+    """Set all agents in the current unit to enable or disable state.
+    Agents should be disabled before removing.
+
+    :param state: State of the agent service
+    :type state: Boolean
+    """
+    neutron_client = neutron.get_neutron()
+    agents = _get_agents(neutron_client)
+    for agent in agents:
+        neutron_client.update_agent(
+            agent['id'],
+            {'agent': {'admin_state_up': state}}
+        )
+    log('Set neutron agents to admin_state_up: {}'.format(state))
+
+
+def disable(args):
+    """Disable all agents on this unit
+
+    :param args: Unused
+    """
+    _set_agents(False)
+
+
+def enable(args):
+    """Enable all agents on this unit
+
+    :param args: Unused
+    """
+    _set_agents(True)
 
 
 def pause(args):
@@ -47,6 +139,53 @@ def resume(args):
     @raises Exception should the service fail to start."""
     resume_unit_helper(register_configs(),
                        exclude_services=['openvswitch-switch'])
+
+
+def register_to_cloud(args):
+    """ This action reverts `remove-from-cloud` action.
+    It starts neutron agents which will trigger its re-registration
+    in the cloud.
+
+    :param args: Unused
+    """
+    log("Starting neutron agents", DEBUG)
+    agents_binaries = _get_agents_binaries()
+
+    for binary in agents_binaries:
+        service_resume(binary)
+
+    current_status = status_get()
+    if current_status[0] == WORKLOAD_STATES.BLOCKED.value and \
+            current_status[1] == UNIT_REMOVED_MSG:
+        status_set(WORKLOAD_STATES.ACTIVE, 'Unit is ready')
+
+    function_set({
+        'command': 'openstack network agent list',
+        'message': 'Neutron agents started. Use the openstack command'
+                   'to verify that agents are registered.'
+    })
+
+
+def remove_from_cloud(args):
+    """This action is preparation for clean removal of neutron-openvswitch
+    unit from juju model. It should be used also before removing
+    nova-compute unit
+
+    :param args: Unused
+    """
+    log("Stopping neutron-openvswitch service", DEBUG)
+    neutron_client = neutron.get_neutron()
+    agents = _get_agents(neutron_client)
+    for agent in agents:
+        if agent['admin_state_up']:
+            function_fail(
+                "Consider disabling neutron agents before deletion"
+            )
+        service_pause(agent['binary'])
+        neutron_client.delete_agent(agent['id'])
+    log("Deleted neutron agents", DEBUG)
+    status_set(WORKLOAD_STATES.BLOCKED, UNIT_REMOVED_MSG)
+    function_set({'message': UNIT_REMOVED_MSG})
 
 
 def restart(args):
@@ -108,9 +247,17 @@ def show_deferred_events(args):
 
 # A dictionary of all the defined actions to callables (which take
 # parsed arguments).
-ACTIONS = {"pause": pause, "resume": resume, "restart-services": restart,
-           "show-deferred-events": show_deferred_events,
-           "run-deferred-hooks": run_deferred_hooks}
+ACTIONS = {
+    "disable": disable,
+    "enable": enable,
+    "pause": pause,
+    "resume": resume,
+    "register-to-cloud": register_to_cloud,
+    "remove-from-cloud": remove_from_cloud,
+    "restart-services": restart,
+    "show-deferred-events": show_deferred_events,
+    "run-deferred-hooks": run_deferred_hooks,
+}
 
 
 def main(args):

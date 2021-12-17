@@ -191,7 +191,59 @@ See the [Deferred service events][cdg-deferred-service-events] page in the
 [OpenStack Charms Deployment Guide][cdg] for an in-depth treatment of this
 feature.
 
+# Cloud downscaling
+
+Removing a [nova-compute][cg-ops-scale-in-nova-compute] and/or `neutron-openvswitch`
+unit from an OpenStack cloud is not a trivial operation and it needs to be done in
+steps to ensure that neutron agents are removed and no VMs are accidentally destroyed:
+
+1. If you plan to remove `nova-compute`, consider running the action of `disable`
+from this unit first. After this, make sure that all VMs hosted on the target compute
+node have been either deleted or migrated to another node. Otherwise, disconsider this
+step.
+
+2. Ensure that there are no agents running on the `neutron-openvswitch`
+unit that's about to be removed. Running juju action `disable` will ensure
+that `agents` are disabled on this unit.
+
+3. Run juju action `remove-from-cloud`. This will stop agents
+services on this unit and it will unregister from the
+neutron-openvswitch application, thereby effectively removing it from the
+OpenStack cloud. If you plan to remove `nova-compute` you can use this
+same action for this unit.
+
+4. Run the `juju remove-unit` command to remove this unit from
+the model. If you plan to remove `nova-compute` you can use this
+same command to this unit.
+
+
+## Undoing unit removal
+
+If the fourth step (`juju remove-unit`) was not executed, the whole process
+can be reverted by running juju actions `register-to-cloud` and `enable`.
+This will start `neutron-openvswitch` and/or `nova-scheduler` again.
+
+# Actions
+
+This section lists Juju [actions][juju-docs-actions] supported by the charm.
+Actions allow specific operations to be performed on a per-unit basis. To
+display action descriptions run `juju actions neutron-openvswitch`. If the charm is
+not deployed then see file `actions.yaml`.
+
+* `cleanup`
+* `disable`
+* `enable`
+* `pause`
+* `register-to-cloud`
+* `remove-from-cloud`
+* `restart-services`
+* `resume`
+* `run-deferred-hooks`
+* `show-deferred-events`
+
 <!-- LINKS -->
 
 [cdg]: https://docs.openstack.org/project-deploy-guide/charm-deployment-guide
 [cdg-deferred-service-events]: https://docs.openstack.org/project-deploy-guide/charm-deployment-guide/latest/deferred-events.html
+[cg-ops-scale-in-nova-compute]:  https://docs.openstack.org/charm-guide/latest/admin/ops-scale-in-nova-compute.html
+[juju-docs-actions]: https://jaas.ai/docs/actions

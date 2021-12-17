@@ -261,8 +261,16 @@ def install_packages():
     # NOTE(jamespage): install neutron-common package so we always
     #                  get a clear signal on which OS release is
     #                  being deployed
-    apt_install(filter_installed_packages(['neutron-common']),
-                fatal=True)
+    apt_install(
+        filter_installed_packages(
+            [
+                "neutron-common",
+                "python3-neutronclient",
+                "python3-keystoneauth1"
+            ]
+        ),
+        fatal=True,
+    )
     # NOTE(jamespage):
     # networking-tools-source provides general tooling for configuration
     # of SR-IOV VF's and Mellanox ConnectX switchdev capable adapters
